@@ -19,6 +19,7 @@ Vector tile caching from GeoJSON files
     
     -l zoom levels ( 0 to 20 ) 
 
-    -a aglo use to choose tile
-       center : choose one tile touching the center of the boundary geo zone area
-       box : choose all tile touching the boundary box of the geo area
+    -a algo use to choose tile (choose between center and box algorithm)
+       
+       * center : choose one tile touching the center of the boundary geo zone area
+       * box : choose all tile touching the boundary box of the geo area
