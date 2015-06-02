@@ -14,6 +14,10 @@ Vector tile caching from GeoJSON files
   * Options
     
     -f input geojson
+
+    -n name of tiles (for client side rendering / styling)
+
+    -t output type ('pbf', 'json')
     
     -d output dir
     

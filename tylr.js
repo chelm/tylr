@@ -1,6 +1,7 @@
 var nfs = require('fs');
 var async = require('async');
 var mapnikTiles = require('mapnik-tiles');
+var zlib = require('zlib');
 
 module.exports = {
 
@@ -11,6 +12,7 @@ module.exports = {
     var levels = options.l.split(',');
     var type = options.t;   
     var algo = options.a;
+    var name = options.n;
 
     console.log( file, dir, levels, algo );
     if ( nfs.existsSync( file ) ) {
@@ -29,9 +31,9 @@ module.exports = {
         for ( var obj in self.localJson ) {
           var xyz = obj.split('/');
           if ( type === 'pbf' ) {
-            self.createPBF({ type: "pbf", dir: dir, z: xyz[0], x: xyz[1], y: xyz[2], json: self.localJson[obj]});
+            self.writePBF({ name: name, type: "pbf", dir: dir, z: xyz[0], x: xyz[1], y: xyz[2], json: self.localJson[obj]});
           } else {
-            self.q.push({ type: "json", dir: dir, z: xyz[0], x: xyz[1], y: xyz[2], json: self.localJson[obj] }, function (err) {} );
+            self.writeJSON({ type: "json", dir: dir, z: xyz[0], x: xyz[1], y: xyz[2], json: self.localJson[obj] }, function (err) {} );
           }
         }
 
@@ -42,34 +44,7 @@ module.exports = {
 
   },
 
-  createPBF: function(options) {
-    var self = this;
-    //console.log('options', options);
-
-    var params = {
-      format: 'pbf',
-      name: 'pbf-tile-layer',
-      z: parseInt(options.z),
-      x: parseInt(options.x),
-      y: parseInt(options.y)
-    };
-
-    mapnikTiles.generate(options.json, params, function(err, tileBuffer) {
-      var p = [options.dir, options.z, options.x].join('/');
-      var file = p + '/' + options.y + '.pbf';
-      console.log('pbf', file);
-
-      if ( err ) {
-        callback( err, null );
-      } else {
-        nfs.mkdir( p, '0777', true, function() {
-          nfs.writeFile( file, tileBuffer, function( err ) {});
-        });
-      }
-    });
-  },
-
-
+  /*local json storage before writing to disk*/
   storeJson: function(options) {
     this.localJson = this.localJson || {};
     var key = [options.z, options.x, options.y].join('/');
@@ -159,22 +134,46 @@ module.exports = {
   },
 
   /*
-  * JSON write queue
+  * Write PBF tiles
   */
-  q: async.queue(function (task, callback) {
-    var p = [task.dir, task.z, task.x].join('/');
-    var file = p + '/' + task.y + '.json';
+  writePBF: function(options) {
+    var self = this;
+    var params = {
+      format: 'pbf',
+      name: options.name,
+      z: parseInt(options.z),
+      x: parseInt(options.x),
+      y: parseInt(options.y)
+    };
 
-    nfs.mkdir( p, '0777', true, function(){
-      if ( !nfs.existsSync( file ) ) {
-        nfs.writeFile( file, JSON.stringify( task.json ));
-        callback();
+    mapnikTiles.generate(options.json, params, function(err, tileBuffer) {
+      var p = [options.dir, options.z, options.x].join('/');
+      var file = p + '/' + options.y + '.pbf';
+      
+      if ( err ) {
+        callback( err, null );
       } else {
-        console.log('should never get here');
+        nfs.mkdir( p, '0777', true, function() {
+          zlib.inflate(tileBuffer, function(e, tbuff) {
+            nfs.writeFile( file, tbuff, function( err ) {});
+          });
+        });
       }
     });
+  },
 
-  }, 2)
+
+  /*
+  * Write JSON tiles
+  */
+  writeJSON: function(options) {
+    var p = [options.dir, options.z, options.x].join('/');
+    var file = p + '/' + options.y + '.json';
+
+    nfs.mkdir( p, '0777', true, function(){
+      nfs.writeFile( file, JSON.stringify( options.json ));
+    });
+  }
 
 };
   
