@@ -15,14 +15,15 @@
     "vector tiles"
   ],
   "dependencies": {
-    "async": "*", 
-    "node-fs": "*", 
-    "optimist": "*" 
+    "async": "*",
+    "mapnik-tiles": "^1.0.3",
+    "node-fs": "*",
+    "optimist": "*"
   },
   "devDependencies": {
     "vows": ">=0.7.0"
   },
-  "bin":{
+  "bin": {
     "tylr": "bin/tylr"
   },
   "author": "Chris Helm",

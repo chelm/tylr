@@ -1,29 +1,83 @@
-var nfs = require('node-fs');
+var nfs = require('fs');
 var async = require('async');
+var mapnikTiles = require('mapnik-tiles');
 
 module.exports = {
 
-  tyle: function( file, dir, levels, algo ){
+  tyle: function( options ){
     var self = this;
+    var file = options.f;
+    var dir = options.d;
+    var levels = options.l.split(',');
+    var type = options.t;   
+    var algo = options.a;
 
     console.log( file, dir, levels, algo );
-
     if ( nfs.existsSync( file ) ) {
       nfs.readFile( file, function( err, data ){
-        console.log('data', data)
         var features = JSON.parse(data).features;
-  
+        //console.log('features', features);
         features.forEach(function( f ){
+          //console.log('f', f);
           var llArray = [];
           llArray = self.getTiles(f.geometry , levels, algo);
           for(i = 0 ;i < llArray.length; i++) {
-            console.log( llArray[i] );
-            self.q.push({ dir: dir, x: llArray[i].x, y: llArray[i].y, z: llArray[i].z, feature: f }, function (err) {} );
+            self.storeJson({ type: "json", dir: dir, x: llArray[i].x, y: llArray[i].y, z: llArray[i].z, feature: f });
           }
         });
+
+        for ( var obj in self.localJson ) {
+          var xyz = obj.split('/');
+          if ( type === 'pbf' ) {
+            self.createPBF({ type: "pbf", dir: dir, z: xyz[0], x: xyz[1], y: xyz[2], json: self.localJson[obj]});
+          } else {
+            self.q.push({ type: "json", dir: dir, z: xyz[0], x: xyz[1], y: xyz[2], json: self.localJson[obj] }, function (err) {} );
+          }
+        }
+
       });
     } else {
       console.log('Can\'t find input geojson file');
+    }
+
+  },
+
+  createPBF: function(options) {
+    var self = this;
+    //console.log('options', options);
+
+    var params = {
+      format: 'pbf',
+      name: 'pbf-tile-layer',
+      z: parseInt(options.z),
+      x: parseInt(options.x),
+      y: parseInt(options.y)
+    };
+
+    mapnikTiles.generate(options.json, params, function(err, tileBuffer) {
+      var p = [options.dir, options.z, options.x].join('/');
+      var file = p + '/' + options.y + '.pbf';
+      console.log('pbf', file);
+
+      if ( err ) {
+        callback( err, null );
+      } else {
+        nfs.mkdir( p, '0777', true, function() {
+          nfs.writeFile( file, tileBuffer, function( err ) {});
+        });
+      }
+    });
+  },
+
+
+  storeJson: function(options) {
+    this.localJson = this.localJson || {};
+    var key = [options.z, options.x, options.y].join('/');
+
+    if ( !this.localJson[key] ) {
+      this.localJson[key] = { type:'FeatureCollection', features: [ options.feature ] };
+    } else {
+      this.localJson[key].features.push(options.feature);
     }
 
   },
@@ -65,7 +119,7 @@ module.exports = {
     }
     var z = parseInt( levels[0] );
     var xyzArray = [];
-  
+    
     while ( z <= levels[ 1 ] ) {
       switch( algo ) {
         case 'center':
@@ -77,7 +131,7 @@ module.exports = {
           // * Taking the tile up right and the tile left down
           var xyzMin = self.location( miny , minx, z );
           var xyzMax = self.location( maxy , maxx, z );
-          console.log('box : x [' + xyzMin.x + ', ' + xyzMax.x + '] - y [' + xyzMax.y + ', ' + xyzMin.y + ']'); 
+          //console.log('box : x [' + xyzMin.x + ', ' + xyzMax.x + '] - y [' + xyzMax.y + ', ' + xyzMin.y + ']'); 
           // for all tile in this area
           for( y = xyzMax.y; y <= xyzMin.y; y++) {
             for( x = xyzMin.x; x <= xyzMax.x; x++) {
@@ -104,28 +158,23 @@ module.exports = {
     return { x : tileX, y: tileY, z: zoom };
   },
 
+  /*
+  * JSON write queue
+  */
   q: async.queue(function (task, callback) {
-
     var p = [task.dir, task.z, task.x].join('/');
-    var file = p + '/' + task.y + '.png';
+    var file = p + '/' + task.y + '.json';
 
     nfs.mkdir( p, '0777', true, function(){
       if ( !nfs.existsSync( file ) ) {
-        nfs.writeFile( file, JSON.stringify({ type:'FeatureCollection', features: [ task.feature ] }));
+        nfs.writeFile( file, JSON.stringify( task.json ));
         callback();
       } else {
-        nfs.readFile( file, function(err, data){
-          var json = JSON.parse(data.toString());
-          json.features.push( task.feature );
-
-          nfs.writeFile( file, JSON.stringify( json ));
-          callback();
-        })
+        console.log('should never get here');
       }
     });
 
   }, 2)
-
 
 };
   

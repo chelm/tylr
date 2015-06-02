@@ -5,10 +5,11 @@ var nfs = require('node-fs'),
   tylr = require('../');
  
 var argv = require('optimist')
-    .usage('Usage: $0 -f [string] -d [string] -l [string] -a [center|box]')
+    .usage('Usage: $0 -f [string] -d [string] -t [string] -l [string] -a [center|box]')
     .demand(['f','d'])
-    .default('l', '0,5')
+    .default('l', '[0,5]')
     .default('a', 'center')
+    .default('t', 'geojson')
     .argv;
 
-tylr.tyle( argv.f, argv.d, argv.l.split(','), argv.a );
+tylr.tyle( argv );
