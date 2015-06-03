@@ -5,10 +5,10 @@ var nfs = require('node-fs'),
   tylr = require('../');
  
 var argv = require('optimist')
-    .usage('Usage: $0 -f [string] -d [string] -t [string] -l [string] -n [string] -a [center|box]')
+    .usage('Usage: $0 -f [input geojson] -d [out-dir] -t [tile type (geojson | pbf)] -l [levels] -n [name] -a [center|box]')
     .demand(['f','d'])
     .default('l', '0,5')
-    .default('n', 'tile-layer')
+    .default('n', 'tile-layer-name')
     .default('a', 'center')
     .default('t', 'geojson')
     .argv;

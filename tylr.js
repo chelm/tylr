@@ -14,6 +14,8 @@ module.exports = {
     var algo = options.a;
     var name = options.n;
 
+    this.verbose = options.v;
+
     console.log( file, dir, levels, algo );
     if ( nfs.existsSync( file ) ) {
       nfs.readFile( file, function( err, data ){
@@ -149,6 +151,10 @@ module.exports = {
     mapnikTiles.generate(options.json, params, function(err, tileBuffer) {
       var p = [options.dir, options.z, options.x].join('/');
       var file = p + '/' + options.y + '.pbf';
+      
+      if (self.verbose) {
+        console.log('PBF File:', file);
+      }
       
       if ( err ) {
         callback( err, null );
