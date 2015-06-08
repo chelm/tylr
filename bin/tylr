@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-var es = require('event-stream')
+var es = require('event-stream'),
+ fs = require('fs')
 
 var argv = require('optimist')
     .usage('Usage: $0 -f [input geojson] -d [out-dir] -t [tile type (geojson|pbf)] -l [levels] -n [name] -a [center|box]')
@@ -10,13 +11,22 @@ var argv = require('optimist')
     .argv;
 
 var tylr = new require('../')(argv)
-tylr.on('end', function(){
-  console.log('done')
-})
 
-process.stdin
-  .pipe(tylr.parser)
-  .pipe(es.mapSync(function (feature) {
+if (argv.f) {
+  var geojson = JSON.parse(fs.readFileSync(argv.f)) 
+  geojson.features.forEach(function (feature) {
     tylr.addFeature(feature)
-    return
-  }))
+  })
+  tylr.writeTiles()
+} else {
+  tylr.on('end', function(){
+    console.log('done')
+  })
+
+  process.stdin
+    .pipe(tylr.parser)
+    .pipe(es.mapSync(function (feature) {
+      tylr.addFeature(feature)
+      return
+    }))
+}
