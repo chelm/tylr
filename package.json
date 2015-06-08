@@ -15,10 +15,15 @@
     "vector tiles"
   ],
   "dependencies": {
+    "JSONStream": "^0.10.0",
     "async": "*",
+    "event-stream": "^3.3.1",
+    "json-stream": "^1.0.0",
     "mapnik-tiles": "^1.0.3",
+    "mkdirp": "^0.5.1",
     "node-fs": "*",
-    "optimist": "*"
+    "optimist": "*",
+    "tilebelt": "^0.7.1"
   },
   "devDependencies": {
     "vows": ">=0.7.0"
