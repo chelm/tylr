@@ -10,11 +10,11 @@ module.exports = function (options) {
   tylr.options = options
 
   // array of features from the incoming stream
-  var features = []
+  tylr.features = []
 
   // store geojson for each tile zoom
   // maps tiles to feature indexes
-  var tileStore = {}
+  tylr.tileStore = {}
 
   tylr.parser = require('JSONStream').parse(options.pattern || 'features.*')
   tylr.parser.on('end', function () {
@@ -28,8 +28,8 @@ module.exports = function (options) {
    * Adds a feature to the list of features to be written
    */
   tylr.addFeature = function (feature) {
-    features.push(feature)
-    tylr.collect(feature.geometry, features.length - 1)
+    tylr.features.push(feature)
+    tylr.collect(feature.geometry, tylr.features.length - 1)
     if (verbose) {
       console.log(feature.properties)
     }
@@ -50,10 +50,10 @@ module.exports = function (options) {
       tiles = tileCover.tiles(geometry, limits)
       tiles.forEach(function (tile) {
         key = tile.join('-')
-        if (!tileStore[key]) {
-          tileStore[key] = []
+        if (!tylr.tileStore[key]) {
+          tylr.tileStore[key] = []
         }
-        tileStore[key].push(index)
+        tylr.tileStore[key].push(index)
       })
     }
   }
@@ -63,8 +63,8 @@ module.exports = function (options) {
    * has logic for writing either pbf or json tiles to disk
    */
   tylr.writeTiles = function () {
-    for (var index in tileStore) {
-      var indexes = tileStore[index]
+    for (var index in tylr.tileStore) {
+      var indexes = tylr.tileStore[index]
       var xyz = index.split('-')
       var geojson = tylr.buildGeoJSON(indexes)
       if (tylr.options.t === 'geojson') {
@@ -78,7 +78,7 @@ module.exports = function (options) {
   tylr.buildGeoJSON = function (indexes) {
     var geojson = {type: 'FeatureCollection', features: []}
     indexes.forEach(function (index) {
-      geojson.features.push(features[index])
+      geojson.features.push(tylr.features[index])
     })
     return geojson
   }
