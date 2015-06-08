@@ -1,6 +1,5 @@
 var fs = require('fs'),
   mkdirp = require('mkdirp'),
-  async = require('async'),
   events = require('events'),
   tileCover = require('tile-cover'),
   mapnikTiles = require('mapnik-tiles'),
@@ -14,7 +13,7 @@ module.exports = function (options) {
   var features = []
 
   // store geojson for each tile zoom
-  // maps tiles to feature indexes 
+  // maps tiles to feature indexes
   var tileStore = {}
 
   tylr.parser = require('JSONStream').parse(options.pattern || 'features.*')
@@ -38,13 +37,13 @@ module.exports = function (options) {
 
   /**
    * Matches features to tiles
-   * intersects a geom with a tile bbox 
+   * intersects a geom with a tile bbox
    */
   tylr.collect = function (geometry, index) {
-    // for each zoom level figure out the tile 
+    // for each zoom level figure out the tile
     var tiles, limits, key
     for (var z = levels[0]; z <= levels[1]; z++) {
-      var limits = {
+      limits = {
         min_zoom: z,
         max_zoom: z
       }
@@ -59,7 +58,7 @@ module.exports = function (options) {
     }
   }
 
-  /** 
+  /**
    * Loops over the tile indexes and build geojson to create tiles
    * has logic for writing either pbf or json tiles to disk
    */
@@ -69,14 +68,14 @@ module.exports = function (options) {
       var xyz = index.split('-')
       var geojson = tylr.buildGeoJSON(indexes)
       if (tylr.options.t === 'geojson') {
-        tyle.createJSONTile(xyz, geojson)
+        tylr.createJSONTile(xyz, geojson)
       } else {
         tylr.createPBFTile(xyz, geojson)
       }
     }
   }
 
-  tylr.buildGeoJSON = function ( indexes ) {
+  tylr.buildGeoJSON = function (indexes) {
     var geojson = {type: 'FeatureCollection', features: []}
     indexes.forEach(function (index) {
       geojson.features.push(features[index])
@@ -91,20 +90,20 @@ module.exports = function (options) {
     var params = {
       format: 'pbf',
       name: tylr.options.name,
-      z: parseInt(xyz[2]),
-      x: parseInt(xyz[0]),
-      y: parseInt(xyz[1])
+      z: parseInt(xyz[2], 0),
+      x: parseInt(xyz[0], 0),
+      y: parseInt(xyz[1], 0)
     }
 
-    mapnikTiles.generate(geojson, params, function (err, tileBuffer) {
+    mapnikTiles.generate(geojson, params, function (err, tileBuffer, callback) {
       var p = [tylr.options.d, xyz[2], xyz[0]].join('/')
       var file = p + '/' + xyz[1] + '.pbf'
-      if (err) {
+      if (err && callback) {
         callback(err, null)
       } else {
         mkdirp(p, function () {
           zlib.inflate(tileBuffer, function (e, tbuff) {
-            fs.writeFile(file, tbuff, function ( err ) {})
+            fs.writeFile(file, tbuff, function () {})
           })
         })
       }
@@ -115,7 +114,7 @@ module.exports = function (options) {
    * Write a tile to disk
    */
   tylr.createJSONTile = function (xyz, geojson) {
-    var dir = [tylr.options.dir, oxy[2], xyz[0]].join('/')
+    var dir = [tylr.options.dir, xyz[2], xyz[0]].join('/')
     var file = dir + '/' + xyz[1] + '.json'
 
     mkdirp(dir, function () {

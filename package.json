@@ -1,10 +1,10 @@
 {
   "name": "tylr",
-  "version": "0.1.1",
-  "description": "A vector tile cache generator for geojson files",
+  "version": "1.0.0",
+  "description": "A vector tile cache generator for geojson",
   "main": "tylr.js",
   "scripts": {
-    "test": "vows --spec"
+    "test": "standard && node test/*.js | tap-spec"
   },
   "repository": {
     "type": "git",
@@ -19,14 +19,15 @@
     "async": "*",
     "event-stream": "^3.3.1",
     "json-stream": "^1.0.0",
-    "mapnik-tiles": "^1.0.3",
+    "mapnik-tiles": "^1.0.4",
     "mkdirp": "^0.5.1",
-    "node-fs": "*",
     "optimist": "*",
-    "tilebelt": "^0.7.1"
+    "tile-cover": "^2.4.1"
   },
   "devDependencies": {
-    "vows": ">=0.7.0"
+    "standard": "*",
+    "tap-spec": "^2.2.2",
+    "tape": "^3.5.0"
   },
   "bin": {
     "tylr": "bin/tylr"
