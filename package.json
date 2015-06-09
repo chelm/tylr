@@ -1,6 +1,6 @@
 {
   "name": "tylr",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A vector tile cache generator for geojson",
   "main": "tylr.js",
   "scripts": {
@@ -22,7 +22,9 @@
     "mapnik-tiles": "^1.0.4",
     "mkdirp": "^0.5.1",
     "optimist": "*",
-    "tile-cover": "^2.4.1"
+    "tilebelt": "^0.7.1",
+    "turf-extent": "^1.0.4",
+    "turf-intersect": "^1.4.2"
   },
   "devDependencies": {
     "standard": "*",

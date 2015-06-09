@@ -1,7 +1,9 @@
 var fs = require('fs'),
   mkdirp = require('mkdirp'),
   events = require('events'),
-  tileCover = require('tile-cover'),
+  tileBelt = require('tilebelt'),
+  intersect = require('turf-intersect'),
+  extent = require('turf-extent'),
   mapnikTiles = require('mapnik-tiles'),
   zlib = require('zlib')
 
@@ -10,7 +12,7 @@ module.exports = function (options) {
   tylr.options = options
 
   // array of features from the incoming stream
-  tylr.features = []
+  // tylr.features = []
 
   // store geojson for each tile zoom
   // maps tiles to feature indexes
@@ -28,33 +30,96 @@ module.exports = function (options) {
    * Adds a feature to the list of features to be written
    */
   tylr.addFeature = function (feature) {
-    tylr.features.push(feature)
-    tylr.collect(feature.geometry, tylr.features.length - 1)
-    if (verbose) {
-      console.log(feature.properties)
+    // for each zoom level figure out the tile
+    var tiles
+    for (var z = levels[0]; z <= levels[1]; z++) {
+      tiles = tylr.findTileCoverage(feature, parseInt(z, 0))
+      tiles.forEach(function (tile) {
+        if (!tylr.tileStore[tile]) {
+          tylr.tileStore[tile] = []
+        }
+        tylr.tileStore[tile].push(feature)
+      })
     }
   }
 
   /**
-   * Matches features to tiles
-   * intersects a geom with a tile bbox
+   * Gets the bbox of a feature and find unique tiles for each corner
    */
-  tylr.collect = function (geometry, index) {
-    // for each zoom level figure out the tile
-    var tiles, limits, key
-    for (var z = levels[0]; z <= levels[1]; z++) {
-      limits = {
-        min_zoom: z,
-        max_zoom: z
-      }
-      tiles = tileCover.tiles(geometry, limits)
-      tiles.forEach(function (tile) {
-        key = tile.join('-')
-        if (!tylr.tileStore[key]) {
-          tylr.tileStore[key] = []
+  tylr.findTileCoverage = function (feature, zoom) {
+    var bbox = extent({type: 'FeatureCollection', features: [feature] }),
+      parentTile = tileBelt.bboxToTile(bbox),
+      tiles = []
+
+    if (parentTile[2] > zoom) {
+      var tileObj = {}
+      tileObj[tileBelt.pointToTile(bbox[0], bbox[1], zoom).join('-')] = true
+      tileObj[tileBelt.pointToTile(bbox[2], bbox[1], zoom).join('-')] = true
+      tileObj[tileBelt.pointToTile(bbox[0], bbox[3], zoom).join('-')] = true
+      tileObj[tileBelt.pointToTile(bbox[2], bbox[3], zoom).join('-')] = true
+      tiles = Object.keys(tileObj)
+      tiles = tiles.map(function (t) { return t.split('-') })
+    } else {
+      tiles = tylr.tilesInParent(parentTile, zoom)
+    }
+
+    var tileJSON, tileMatch = []
+    tiles.forEach(function (tile) {
+      tileJSON = tileBelt.tileToGeoJSON(tile)
+      var coords = [[
+        [ bbox[0], bbox[1] ],
+        [ bbox[2], bbox[1] ],
+        [ bbox[2], bbox[3] ],
+        [ bbox[0], bbox[3] ],
+        [ bbox[0], bbox[1] ]
+      ]]
+      var polygon = {
+        type: 'Feature',
+        geometry: {
+          coordinates: coords,
+          type: 'Polygon'
         }
-        tylr.tileStore[key].push(index)
+      }
+      try {
+        if (intersect(tileJSON, polygon)) {
+          tileMatch.push(tile.join('-'))
+        }
+      } catch (e) {
+        console.log(e, tile, feature.properties)
+      }
+
+    })
+    return tileMatch
+  }
+
+  /**
+   * Creates an array of all the children tiles at the given zoom
+   * must progress the zoom level up until it matches the passes in level
+   * and collect tiles only at the highest zoom
+   *
+   *
+   */
+  tylr.tilesInParent = function (parentTile, zoom) {
+    var tiles = [],
+      parentZ = parentTile[2]
+
+    var loopChildren = function (children) {
+      children.forEach(function (child) {
+        if (child[2] === zoom) {
+          tiles.push(child)
+        } else if (child[2] < zoom) {
+          loopChildren(tileBelt.getChildren(child))
+        }
       })
+    }
+
+    // are the zooms the same
+    if (parentZ === zoom) {
+      tiles = [parentTile]
+      return tiles
+    } else if (parentZ < zoom) {
+      loopChildren(tileBelt.getChildren(parentTile))
+      return tiles
     }
   }
 
@@ -63,22 +128,36 @@ module.exports = function (options) {
    * has logic for writing either pbf or json tiles to disk
    */
   tylr.writeTiles = function () {
-    for (var index in tylr.tileStore) {
-      var indexes = tylr.tileStore[index]
-      var xyz = index.split('-')
-      var geojson = tylr.buildGeoJSON(indexes)
-      if (tylr.options.t === 'geojson') {
-        tylr.createJSONTile(xyz, geojson)
+    var tiles = Object.keys(tylr.tileStore)
+
+    var next = function (index) {
+
+      if (!index) {
+        console.log('All done!')
+        return
       } else {
-        tylr.createPBFTile(xyz, geojson)
+        var features = tylr.tileStore[index]
+        var xyz = index.split('-')
+        var geojson = tylr.buildGeoJSON(features)
+
+        if (tylr.options.t === 'geojson') {
+          tylr.createJSONTile(xyz, geojson, function () {
+            next(tiles.pop())
+          })
+        } else {
+          tylr.createPBFTile(xyz, geojson, function () {
+            next(tiles.pop())
+          })
+        }
       }
     }
+    next(tiles.pop())
   }
 
-  tylr.buildGeoJSON = function (indexes) {
+  tylr.buildGeoJSON = function (list) {
     var geojson = {type: 'FeatureCollection', features: []}
-    indexes.forEach(function (index) {
-      geojson.features.push(tylr.features[index])
+    list.forEach(function (f) {
+      geojson.features.push(f) // tylr.features[index-1])
     })
     return geojson
   }
@@ -86,24 +165,33 @@ module.exports = function (options) {
   /**
    * Write PBF tiles
    */
-  tylr.createPBFTile = function (xyz, geojson) {
+  tylr.createPBFTile = function (xyz, geojson, callback) {
+    var z = parseInt(xyz[2], 0),
+      y = parseInt(xyz[1], 0),
+      x = parseInt(xyz[0], 0)
+
     var params = {
       format: 'pbf',
       name: tylr.options.name,
-      z: parseInt(xyz[2], 0),
-      x: parseInt(xyz[0], 0),
-      y: parseInt(xyz[1], 0)
+      z: z,
+      x: x,
+      y: y
     }
 
-    mapnikTiles.generate(geojson, params, function (err, tileBuffer, callback) {
-      var p = [tylr.options.d, xyz[2], xyz[0]].join('/')
-      var file = p + '/' + xyz[1] + '.pbf'
-      if (err && callback) {
-        callback(err, null)
+    mapnikTiles.generate(geojson, params, function (err, tileBuffer) {
+      var p = [tylr.options.d, z, x].join('/')
+      var file = p + '/' + y + '.pbf'
+
+      if (verbose) {
+        console.log(file)
+      }
+
+      if (err) {
+        console.log(err)
       } else {
         mkdirp(p, function () {
           zlib.inflate(tileBuffer, function (e, tbuff) {
-            fs.writeFile(file, tbuff, function () {})
+            fs.writeFile(file, tbuff, function () { callback() })
           })
         })
       }
@@ -113,12 +201,11 @@ module.exports = function (options) {
   /**
    * Write a tile to disk
    */
-  tylr.createJSONTile = function (xyz, geojson) {
-    var dir = [tylr.options.dir, xyz[2], xyz[0]].join('/')
+  tylr.createJSONTile = function (xyz, geojson, callback) {
+    var dir = [tylr.options.d, xyz[2], xyz[0]].join('/')
     var file = dir + '/' + xyz[1] + '.json'
-
     mkdirp(dir, function () {
-      fs.writeFile(file, JSON.stringify(options.json))
+      fs.writeFile(file, JSON.stringify(options.json), function () { callback() })
     })
   }
 
